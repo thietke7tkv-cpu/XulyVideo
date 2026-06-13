@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Công Cụ Đổi FPS Video</title>
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     
     <!-- FFmpeg UMD Scripts -->
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
 
     <style>
         /* Custom scrollbar for better appearance */
@@ -117,7 +117,10 @@
             <!-- Box Thông báo lỗi -->
             <div id="errorBox" class="hidden bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3">
                 <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
-                <p id="errorMessage" class="text-sm"></p>
+                <div class="flex flex-col">
+                    <p id="errorMessage" class="text-sm font-bold mb-1"></p>
+                    <p id="errorDetail" class="text-xs opacity-80"></p>
+                </div>
             </div>
 
         </div>
@@ -155,20 +158,27 @@
 
     <!-- Logic Xử Lý với FFmpeg.wasm (Phiên bản UMD) -->
     <script>
-        // Lấy các components từ global object do thư viện UMD cung cấp
         const { FFmpeg } = window.FFmpegWASM;
         
-        // Tự triển khai các hàm tiện ích để tránh lỗi "exports is not defined"
+        // Tự triển khai các hàm tiện ích có xử lý lỗi chi tiết
         const fetchFile = async (file) => {
             const buffer = await file.arrayBuffer();
             return new Uint8Array(buffer);
         };
 
         const toBlobURL = async (url, mimeType) => {
-            const response = await fetch(url);
-            const buffer = await response.arrayBuffer();
-            const blob = new Blob([buffer], { type: mimeType });
-            return URL.createObjectURL(blob);
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} khi tải ${url}`);
+                }
+                const buffer = await response.arrayBuffer();
+                const blob = new Blob([buffer], { type: mimeType });
+                return URL.createObjectURL(blob);
+            } catch (error) {
+                console.error('Fetch error:', error);
+                throw new Error(`Lỗi kết nối mạng hoặc CORS khi tải: ${url}. Chi tiết: ${error.message}`);
+            }
         };
 
         // Khởi tạo icons
@@ -187,6 +197,7 @@
         const percentText = document.getElementById('percentText');
         const errorBox = document.getElementById('errorBox');
         const errorMessage = document.getElementById('errorMessage');
+        const errorDetail = document.getElementById('errorDetail');
         const originalVideo = document.getElementById('originalVideo');
         const originalLabel = document.getElementById('originalLabel');
         const outputVideo = document.getElementById('outputVideo');
@@ -198,11 +209,12 @@
         let ffmpeg = null;
         let isProcessing = false;
 
-        // Hàm hiển thị lỗi
-        const showError = (msg) => {
-            errorMessage.textContent = msg;
+        // Hàm hiển thị lỗi chi tiết
+        const showError = (title, detail = '') => {
+            errorMessage.textContent = title;
+            errorDetail.textContent = detail;
             errorBox.classList.remove('hidden');
-            setTimeout(() => errorBox.classList.add('hidden'), 8000);
+            progressBox.classList.add('hidden');
         };
 
         // Hàm đặt lại UI
@@ -219,7 +231,9 @@
             outputVideo.src = '';
             downloadContainer.classList.add('hidden');
             progressBox.classList.add('hidden');
+            errorBox.classList.add('hidden');
             processBtn.disabled = false;
+            processBtn.classList.remove('opacity-70', 'cursor-not-allowed');
             processBtn.innerHTML = `<i data-lucide="settings" class="w-5 h-5"></i> Bắt đầu chuyển đổi`;
             lucide.createIcons();
         };
@@ -231,7 +245,7 @@
 
             // Kiểm tra dung lượng
             if (file.size > 100 * 1024 * 1024) {
-                showError('Video quá lớn. Vui lòng chọn video dưới 100MB để đảm bảo trình duyệt không bị treo khi xử lý.');
+                showError('Video quá lớn', 'Vui lòng chọn video dưới 100MB để đảm bảo trình duyệt không bị treo khi xử lý.');
                 fileInput.value = '';
                 return;
             }
@@ -276,7 +290,7 @@
             try {
                 // Khởi tạo FFmpeg nếu chưa có
                 if (!ffmpeg) {
-                    statusText.textContent = 'Đang tải nhân xử lý FFmpeg... (Chỉ lần đầu)';
+                    statusText.textContent = 'Đang tải nhân xử lý FFmpeg... (Chỉ tải lần đầu)';
                     ffmpeg = new FFmpeg();
                     
                     ffmpeg.on('progress', ({ progress }) => {
@@ -288,17 +302,18 @@
                         statusText.textContent = 'Đang xử lý khung hình...';
                     });
 
+                    // Sử dụng thư viện qua unpkg
                     const coreBaseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
                     const ffmpegBaseURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
-                    // Chuyển file worker.js thành dạng blob để vượt qua lỗi SecurityError/CORS
+                    // Cố gắng tải workerBlob, nếu thất bại hàm toBlobURL sẽ ném lỗi chi tiết
                     const workerBlobURL = await toBlobURL(`${ffmpegBaseURL}/814.ffmpeg.js`, 'text/javascript');
 
                     await ffmpeg.load({
                         coreURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.js`, 'text/javascript'),
                         wasmURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, 'application/wasm'),
                         workerURL: workerBlobURL,
-                        classWorkerURL: workerBlobURL // Dự phòng cho một số bản cập nhật API
+                        classWorkerURL: workerBlobURL // Dự phòng cho các thay đổi của API
                     });
                 }
 
@@ -310,7 +325,7 @@
 
                 statusText.textContent = 'Bắt đầu xử lý...';
                 
-                // Chạy lệnh FFmpeg
+                // Lệnh chuyển FPS: -vf fps=... 
                 await ffmpeg.exec([
                     '-i', 'input.mp4',
                     '-vf', `fps=${selectedFPS}`,
@@ -344,7 +359,7 @@
 
             } catch (err) {
                 console.error(err);
-                showError(`Lỗi: ${err.message || 'Trình duyệt không đủ bộ nhớ hoặc định dạng video không được hỗ trợ.'}`);
+                showError('Có lỗi trong quá trình xử lý!', err.message || err.toString());
             } finally {
                 isProcessing = false;
                 processBtn.disabled = false;

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Công Cụ Đổi FPS Video</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- FFmpeg UMD Scripts -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+
+    <style>
+        /* Custom scrollbar for better appearance */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
+            <div class="bg-blue-600 p-2 rounded-lg text-white">
+                <i data-lucide="video" class="w-6 h-6"></i>
+            </div>
+            <h1 class="text-xl font-bold text-slate-800">Video FPS Converter</h1>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-6xl mx-auto w-full px-4 py-8 grid grid-cols-1 md:grid-cols-12 gap-8">
+        
+        <!-- Cột điều khiển (Bên trái) -->
+        <div class="md:col-span-5 space-y-6">
+            
+            <!-- Box Upload -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <span class="bg-blue-100 text-blue-700 w-6 h-6 rounded-full flex items-center justify-center text-sm">1</span>
+                    Tải Video Lên
+                </h2>
+                
+                <div id="dropzone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 transition cursor-pointer relative">
+                    <input type="file" id="fileInput" accept="video/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <i data-lucide="upload-cloud" class="w-10 h-10 text-slate-400 mx-auto mb-3"></i>
+                    <p class="text-slate-600 font-medium">Kéo thả hoặc nhấn để chọn video</p>
+                    <p class="text-slate-400 text-sm mt-1">Hỗ trợ MP4, WebM, MOV... (Tối đa 100MB)</p>
+                </div>
+
+                <div id="fileInfo" class="hidden mt-4 bg-slate-50 p-3 rounded-lg flex items-center justify-between border border-slate-200">
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <i data-lucide="file-video" class="w-5 h-5 text-blue-600 flex-shrink-0"></i>
+                        <span id="fileName" class="text-sm font-medium text-slate-700 truncate">video.mp4</span>
+                    </div>
+                    <button id="removeFileBtn" class="text-slate-400 hover:text-red-500 transition p-1">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Box Tùy Chọn FPS -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 opacity-50 pointer-events-none transition-opacity duration-300" id="optionsBox">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <span class="bg-blue-100 text-blue-700 w-6 h-6 rounded-full flex items-center justify-center text-sm">2</span>
+                    Chọn Tốc Độ Khung Hình (FPS)
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="cursor-pointer relative">
+                        <input type="radio" name="fps" value="24" class="peer sr-only" checked>
+                        <div class="p-4 rounded-xl border-2 border-slate-200 peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-blue-300 transition text-center">
+                            <span class="block text-2xl font-bold text-slate-800 peer-checked:text-blue-700">24</span>
+                            <span class="text-sm text-slate-500">Điện ảnh / Tiêu chuẩn</span>
+                        </div>
+                    </label>
+                    <label class="cursor-pointer relative">
+                        <input type="radio" name="fps" value="30" class="peer sr-only">
+                        <div class="p-4 rounded-xl border-2 border-slate-200 peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-blue-300 transition text-center">
+                            <span class="block text-2xl font-bold text-slate-800 peer-checked:text-blue-700">30</span>
+                            <span class="text-sm text-slate-500">Mượt mà / Phổ biến</span>
+                        </div>
+                    </label>
+                </div>
+
+                <button id="processBtn" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                    Bắt đầu chuyển đổi
+                </button>
+            </div>
+
+            <!-- Box Tiến Trình -->
+            <div id="progressBox" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex items-center justify-between mb-2">
+                    <span id="statusText" class="text-sm font-medium text-slate-700">Đang chuẩn bị...</span>
+                    <span id="percentText" class="text-sm font-bold text-blue-600">0%</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p class="text-xs text-slate-400 mt-3 text-center">Vui lòng không đóng trình duyệt trong quá trình xử lý.</p>
+            </div>
+
+            <!-- Box Thông báo lỗi -->
+            <div id="errorBox" class="hidden bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3">
+                <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+                <p id="errorMessage" class="text-sm"></p>
+            </div>
+
+        </div>
+
+        <!-- Cột Xem trước (Bên phải) -->
+        <div class="md:col-span-7 space-y-6">
+            
+            <!-- Video Gốc -->
+            <div class="bg-black/5 rounded-2xl overflow-hidden border border-slate-200 relative aspect-video flex items-center justify-center group" id="originalVideoContainer">
+                <p class="text-slate-400 absolute z-0">Chưa có video gốc</p>
+                <video id="originalVideo" class="absolute inset-0 w-full h-full object-contain hidden z-10" controls></video>
+                <div class="absolute top-4 left-4 z-20 bg-black/60 backdrop-blur text-white text-xs px-2 py-1 rounded-md hidden" id="originalLabel">Video Gốc</div>
+            </div>
+
+            <!-- Video Kết Quả -->
+            <div class="bg-black/5 rounded-2xl overflow-hidden border border-slate-200 relative aspect-video flex items-center justify-center" id="outputVideoContainer">
+                <p class="text-slate-400 absolute z-0 text-center px-4">
+                    Video đã chuyển đổi sẽ hiển thị tại đây.<br>
+                    <span class="text-sm">Trình duyệt sẽ xử lý lượt bỏ frames thừa để đúng với FPS bạn chọn.</span>
+                </p>
+                <video id="outputVideo" class="absolute inset-0 w-full h-full object-contain hidden z-10" controls></video>
+                <div class="absolute top-4 left-4 z-20 bg-green-600/80 backdrop-blur text-white text-xs px-2 py-1 rounded-md hidden" id="outputLabel">Video Mới (Đã xử lý)</div>
+            </div>
+
+            <!-- Nút Tải xuống -->
+            <div id="downloadContainer" class="hidden flex justify-end">
+                <a id="downloadBtn" href="#" download="video_da_chuyen_doi.mp4" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl transition flex items-center gap-2 shadow-sm">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                    Tải Video Xuống
+                </a>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Logic Xử Lý với FFmpeg.wasm (Phiên bản UMD) -->
+    <script>
+        // Lấy các components từ global object do thư viện UMD cung cấp
+        const { FFmpeg } = window.FFmpegWASM;
+        
+        // Tự triển khai các hàm tiện ích để tránh lỗi "exports is not defined"
+        const fetchFile = async (file) => {
+            const buffer = await file.arrayBuffer();
+            return new Uint8Array(buffer);
+        };
+
+        const toBlobURL = async (url, mimeType) => {
+            const response = await fetch(url);
+            const buffer = await response.arrayBuffer();
+            const blob = new Blob([buffer], { type: mimeType });
+            return URL.createObjectURL(blob);
+        };
+
+        // Khởi tạo icons
+        lucide.createIcons();
+
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const removeFileBtn = document.getElementById('removeFileBtn');
+        const optionsBox = document.getElementById('optionsBox');
+        const processBtn = document.getElementById('processBtn');
+        const progressBox = document.getElementById('progressBox');
+        const progressBar = document.getElementById('progressBar');
+        const statusText = document.getElementById('statusText');
+        const percentText = document.getElementById('percentText');
+        const errorBox = document.getElementById('errorBox');
+        const errorMessage = document.getElementById('errorMessage');
+        const originalVideo = document.getElementById('originalVideo');
+        const originalLabel = document.getElementById('originalLabel');
+        const outputVideo = document.getElementById('outputVideo');
+        const outputLabel = document.getElementById('outputLabel');
+        const downloadContainer = document.getElementById('downloadContainer');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let selectedFile = null;
+        let ffmpeg = null;
+        let isProcessing = false;
+
+        // Hàm hiển thị lỗi
+        const showError = (msg) => {
+            errorMessage.textContent = msg;
+            errorBox.classList.remove('hidden');
+            setTimeout(() => errorBox.classList.add('hidden'), 8000);
+        };
+
+        // Hàm đặt lại UI
+        const resetUI = () => {
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            optionsBox.classList.add('opacity-50', 'pointer-events-none');
+            originalVideo.classList.add('hidden');
+            originalLabel.classList.add('hidden');
+            originalVideo.src = '';
+            outputVideo.classList.add('hidden');
+            outputLabel.classList.add('hidden');
+            outputVideo.src = '';
+            downloadContainer.classList.add('hidden');
+            progressBox.classList.add('hidden');
+            processBtn.disabled = false;
+            processBtn.innerHTML = `<i data-lucide="settings" class="w-5 h-5"></i> Bắt đầu chuyển đổi`;
+            lucide.createIcons();
+        };
+
+        // Xử lý khi chọn file
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Kiểm tra dung lượng
+            if (file.size > 100 * 1024 * 1024) {
+                showError('Video quá lớn. Vui lòng chọn video dưới 100MB để đảm bảo trình duyệt không bị treo khi xử lý.');
+                fileInput.value = '';
+                return;
+            }
+
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileInfo.classList.remove('hidden');
+            optionsBox.classList.remove('opacity-50', 'pointer-events-none');
+            errorBox.classList.add('hidden');
+
+            // Hiển thị video gốc
+            const url = URL.createObjectURL(file);
+            originalVideo.src = url;
+            originalVideo.classList.remove('hidden');
+            originalLabel.classList.remove('hidden');
+
+            // Reset video kết quả
+            outputVideo.classList.add('hidden');
+            outputLabel.classList.add('hidden');
+            downloadContainer.classList.add('hidden');
+        });
+
+        // Xóa file
+        removeFileBtn.addEventListener('click', resetUI);
+
+        // Xử lý logic chuyển đổi
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile || isProcessing) return;
+
+            const selectedFPS = document.querySelector('input[name="fps"]:checked').value;
+            
+            isProcessing = true;
+            processBtn.disabled = true;
+            processBtn.classList.add('opacity-70', 'cursor-not-allowed');
+            optionsBox.classList.add('opacity-50', 'pointer-events-none');
+            progressBox.classList.remove('hidden');
+            errorBox.classList.add('hidden');
+            outputVideo.classList.add('hidden');
+            outputLabel.classList.add('hidden');
+            downloadContainer.classList.add('hidden');
+
+            try {
+                // Khởi tạo FFmpeg nếu chưa có
+                if (!ffmpeg) {
+                    statusText.textContent = 'Đang tải nhân xử lý FFmpeg... (Chỉ lần đầu)';
+                    ffmpeg = new FFmpeg();
+                    
+                    ffmpeg.on('progress', ({ progress }) => {
+                        let percent = Math.round(progress * 100);
+                        if(percent > 100) percent = 100;
+                        if(percent < 0) percent = 0;
+                        progressBar.style.width = `${percent}%`;
+                        percentText.textContent = `${percent}%`;
+                        statusText.textContent = 'Đang xử lý khung hình...';
+                    });
+
+                    const coreBaseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+                    const ffmpegBaseURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+
+                    // Chuyển file worker.js thành dạng blob để vượt qua lỗi SecurityError/CORS
+                    const workerBlobURL = await toBlobURL(`${ffmpegBaseURL}/814.ffmpeg.js`, 'text/javascript');
+
+                    await ffmpeg.load({
+                        coreURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.js`, 'text/javascript'),
+                        wasmURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+                        workerURL: workerBlobURL,
+                        classWorkerURL: workerBlobURL // Dự phòng cho một số bản cập nhật API
+                    });
+                }
+
+                statusText.textContent = 'Đang đọc file video...';
+                progressBar.style.width = '0%';
+                percentText.textContent = '0%';
+
+                await ffmpeg.writeFile('input.mp4', await fetchFile(selectedFile));
+
+                statusText.textContent = 'Bắt đầu xử lý...';
+                
+                // Chạy lệnh FFmpeg
+                await ffmpeg.exec([
+                    '-i', 'input.mp4',
+                    '-vf', `fps=${selectedFPS}`,
+                    '-c:v', 'libx264',
+                    '-preset', 'ultrafast',
+                    '-c:a', 'aac',
+                    'output.mp4'
+                ]);
+
+                statusText.textContent = 'Đang xuất video...';
+
+                // Lấy file kết quả
+                const fileData = await ffmpeg.readFile('output.mp4');
+                const dataArray = new Uint8Array(fileData);
+                const blob = new Blob([dataArray.buffer], { type: 'video/mp4' });
+                const url = URL.createObjectURL(blob);
+
+                // Hiển thị kết quả
+                outputVideo.src = url;
+                outputVideo.classList.remove('hidden');
+                outputLabel.classList.remove('hidden');
+                outputLabel.textContent = `Video Mới (${selectedFPS} FPS)`;
+                
+                downloadBtn.href = url;
+                downloadBtn.download = `video_${selectedFPS}fps.mp4`;
+                downloadContainer.classList.remove('hidden');
+
+                statusText.textContent = 'Hoàn tất!';
+                progressBar.style.width = '100%';
+                percentText.textContent = '100%';
+
+            } catch (err) {
+                console.error(err);
+                showError(`Lỗi: ${err.message || 'Trình duyệt không đủ bộ nhớ hoặc định dạng video không được hỗ trợ.'}`);
+            } finally {
+                isProcessing = false;
+                processBtn.disabled = false;
+                processBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+                optionsBox.classList.remove('opacity-50', 'pointer-events-none');
+            }
+        });
+
+    </script>
+</body>
+</html>

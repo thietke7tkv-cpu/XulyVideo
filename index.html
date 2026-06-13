@@ -9,8 +9,8 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- FFmpeg UMD Scripts -->
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <!-- FFmpeg UMD Scripts (Chuyển sang jsDelivr ổn định và không lỗi CORS) -->
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
 
     <style>
         /* Custom scrollbar for better appearance */
@@ -288,8 +288,8 @@
             downloadContainer.classList.add('hidden');
 
             try {
-                // Khởi tạo FFmpeg nếu chưa có
-                if (!ffmpeg) {
+                // Khởi tạo FFmpeg nếu chưa có hoặc trước đó tải lỗi
+                if (!ffmpeg || !ffmpeg.loaded) {
                     statusText.textContent = 'Đang tải nhân xử lý FFmpeg... (Chỉ tải lần đầu)';
                     ffmpeg = new FFmpeg();
                     
@@ -302,19 +302,24 @@
                         statusText.textContent = 'Đang xử lý khung hình...';
                     });
 
-                    // Sử dụng thư viện qua unpkg
-                    const coreBaseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-                    const ffmpegBaseURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+                    // Sử dụng jsDelivr thay cho unpkg
+                    const coreBaseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+                    const ffmpegBaseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
-                    // Cố gắng tải workerBlob, nếu thất bại hàm toBlobURL sẽ ném lỗi chi tiết
-                    const workerBlobURL = await toBlobURL(`${ffmpegBaseURL}/814.ffmpeg.js`, 'text/javascript');
+                    try {
+                        // CHỈ dùng Blob cho Worker để tránh lỗi SecurityError
+                        // Core và Wasm giữ nguyên đường dẫn mạng để Web Worker tải chuẩn xác
+                        const workerBlobURL = await toBlobURL(`${ffmpegBaseURL}/814.ffmpeg.js`, 'text/javascript');
 
-                    await ffmpeg.load({
-                        coreURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.js`, 'text/javascript'),
-                        wasmURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-                        workerURL: workerBlobURL,
-                        classWorkerURL: workerBlobURL // Dự phòng cho các thay đổi của API
-                    });
+                        await ffmpeg.load({
+                            coreURL: `${coreBaseURL}/ffmpeg-core.js`,
+                            wasmURL: `${coreBaseURL}/ffmpeg-core.wasm`,
+                            workerURL: workerBlobURL
+                        });
+                    } catch (loadError) {
+                        ffmpeg = null; // Xóa đối tượng lỗi để người dùng có thể bấm thử lại
+                        throw new Error(`Không tải được nhân xử lý: ${loadError.message}`);
+                    }
                 }
 
                 statusText.textContent = 'Đang đọc file video...';

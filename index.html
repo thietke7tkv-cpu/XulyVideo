@@ -307,14 +307,17 @@
                     const ffmpegBaseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
                     try {
-                        // CHỈ dùng Blob cho Worker để tránh lỗi SecurityError
-                        // Core và Wasm giữ nguyên đường dẫn mạng để Web Worker tải chuẩn xác
-                        const workerBlobURL = await toBlobURL(`${ffmpegBaseURL}/814.ffmpeg.js`, 'text/javascript');
+                        // Chuyển TẤT CẢ các file thành dạng Blob URL cục bộ
+                        // Giúp trình duyệt hiểu rằng đây là code an toàn, cùng tên miền (same-origin)
+                        const coreURL = await toBlobURL(`${coreBaseURL}/ffmpeg-core.js`, 'text/javascript');
+                        const wasmURL = await toBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, 'application/wasm');
+                        const workerURL = await toBlobURL(`${ffmpegBaseURL}/814.ffmpeg.js`, 'text/javascript');
 
                         await ffmpeg.load({
-                            coreURL: `${coreBaseURL}/ffmpeg-core.js`,
-                            wasmURL: `${coreBaseURL}/ffmpeg-core.wasm`,
-                            workerURL: workerBlobURL
+                            coreURL: coreURL,
+                            wasmURL: wasmURL,
+                            workerURL: workerURL,
+                            classWorkerURL: workerURL // BẮT BUỘC: Ngăn FFmpeg gọi trực tiếp đến CDN
                         });
                     } catch (loadError) {
                         ffmpeg = null; // Xóa đối tượng lỗi để người dùng có thể bấm thử lại
